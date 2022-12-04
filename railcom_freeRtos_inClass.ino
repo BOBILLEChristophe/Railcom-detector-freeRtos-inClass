@@ -43,8 +43,6 @@ void setup() {
   Serial.printf("\nCompiled :     %s", __DATE__);
   Serial.printf(" - %s\n\n", __TIME__);
 
-  //railcom.process();
-
   for (;;)
   {
     Serial.printf("Adresse loco = %d\n", railcom.gAddress());
