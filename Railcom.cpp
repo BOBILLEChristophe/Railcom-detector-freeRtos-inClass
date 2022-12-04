@@ -71,7 +71,6 @@ for (;;)
       compt++;
     }
     compt = 0;
-    // Serial.println("---------");
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1)); // toutes les x ms
   }
 
