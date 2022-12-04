@@ -22,7 +22,6 @@
 #include "Railcom.h"
 
 #define RAILCOM_RX                    GPIO_NUM_14
-//#define RAILCOM_RX                    GPIO_NUM_33
 #define RAILCOM_TX                    GPIO_NUM_17
 
 Railcom railcom(RAILCOM_TX, RAILCOM_RX);
