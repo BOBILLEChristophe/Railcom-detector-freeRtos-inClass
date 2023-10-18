@@ -1,13 +1,14 @@
 
 /*
-   Programme de lecture, de décodage et d'affichage des messages Railcom ©
-   qui retourne l'adresse d'un décodeur (adresse courte ou longue) sur le port serie (115200 bauds)
+   Programme de lecture, de decodage et d'affichage des messages Railcom ©
+   qui retourne l'adresse d'un decodeur (adresse courte ou longue) sur le port serie (115200 bauds)
 
    Fonctionne exclusivement sur ESP32
-   © christophe bobille
+   © christophe bobille - locoduino.org
 
    lib_deps = locoduino/RingBuffer@^1.0.3 / https://github.com/Locoduino/RingBuffer
 
+   Le moniteur série est réglé à 250 Kbs (Serial.begin(250000))
 */
 
 #ifndef ARDUINO_ARCH_ESP32
@@ -15,40 +16,41 @@
 #endif
 
 #include <Arduino.h>
-
-#define VERSION "v 1.0"
-#define PROJECT "Railcom Detector ESP32 (freeRTOS in class)"
-
 #include "Railcom.h"
 
-#define RAILCOM_RX                    GPIO_NUM_14
-#define RAILCOM_TX                    GPIO_NUM_17
+#define VERSION "v 1.1"
+#define PROJECT "Railcom Detector ESP32 (freeRTOS in class)"
+#define AUTHOR  "christophe BOBILLE Locoduino : christophe.bobille@gmail.com"
 
-Railcom railcom(RAILCOM_TX, RAILCOM_RX);
+#define WITH_INTER
 
+#ifdef WITH_INTER
 
-/*——————————————————————————————————————————————————————————————————————————————
-   SETUP
-  ————————————————————————————————————————————————————————————————————————————--*/
+const gpio_num_t interPin0 = GPIO_NUM_18;
+const gpio_num_t interPin1 = GPIO_NUM_19;
+const gpio_num_t interPin2 = GPIO_NUM_20;
+Railcom railcom_0(GPIO_NUM_3, GPIO_NUM_1, GPIO_NUM_18);   // Instance de la classe Railcom
+Railcom railcom_1(GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_19); // Instance de la classe Railcom
+Railcom railcom_2(GPIO_NUM_13, GPIO_NUM_14, GPIO_NUM_20); // Instance de la classe Railcom
 
-void setup() {
-  //--- Start serial
-  Serial.begin (115200) ;
-  delay (1000) ;
+#else
 
-  Serial.printf("\n\nProject :    %s", PROJECT);
-  Serial.printf("\nVersion :      %s", VERSION);
-  Serial.printf("\nFichier :      %s", __FILE__);
-  Serial.printf("\nCompiled :     %s", __DATE__);
-  Serial.printf(" - %s\n\n", __TIME__);
+Railcom railcom_0(GPIO_NUM_3, GPIO_NUM_1);   // Instance de la classe Railcom
+Railcom railcom_1(GPIO_NUM_16, GPIO_NUM_17); // Instance de la classe Railcom
+Railcom railcom_2(GPIO_NUM_13, GPIO_NUM_14); // Instance de la classe Railcom
 
-  for (;;)
-  {
-    Serial.printf("Adresse loco = %d\n", railcom.gAddress());
-    delay(1000);
-  }
+#endif
+
+void setup()
+{
 }
 
 
 void loop ()
-{}
+{
+  // Affiche toutes les secondes dans le moniteur serie l'adresse de la locomotive
+  Serial.printf("Adresse loco 0 = %d\n", railcom_0.address());
+  Serial.printf("Adresse loco 1 = %d\n", railcom_1.address());
+  Serial.printf("Adresse loco 2 = %d\n", railcom_2.address());
+  delay(1000);
+}
