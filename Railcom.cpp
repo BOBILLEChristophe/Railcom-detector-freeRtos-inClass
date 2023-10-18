@@ -1,114 +1,173 @@
 /*
 
+   Railcom.cpp
+
+   © christophe bobille - locoduino.org
+
 */
 
+// #ifndef ARDUINO_ARCH_ESP32
+// #error "Select an ESP32 board"
+// #endif
+
+#include <Arduino.h>
 #include "Railcom.h"
 
+uint8_t Railcom::m_compt(0);
+
+#define NB_ADDRESS_TO_COMPARE 100
+
 // Identifiants des données du canal 1
-#define CH1_ADR_LOW  ( 1 << 2 )
-#define CH1_ADR_HIGH ( 1 << 3 )
+const byte CH1_ADR_LOW = 1 << 2;
+const byte CH1_ADR_HIGH = 1 << 3;
 
-#define QUEUE_1_SIZE 10
-#define QUEUE_2_SIZE  3
+const byte QUEUE_1_SIZE = 10;
+const byte QUEUE_2_SIZE = 3;
 
-#define NB_ADDRESS_TO_COMPARE 100                // Nombre de valeurs à comparer pour obtenir l'adresse de la loco
 RingBuf<uint16_t, NB_ADDRESS_TO_COMPARE> buffer; // Instance
 
 /* ----- Constructeur   -------------------*/
-
-Railcom::Railcom(uint8_t txPin, uint8_t rxPin) :
-  _txPin(txPin),
-  _rxPin(rxPin)
+Railcom::Railcom(const gpio_num_t rxPin, const gpio_num_t txPin, const gpio_num_t intPin)
+    : m_rxPin(rxPin),
+      m_txPin(txPin),
+      m_intPin(intPin),
+      m_address(0)
 {
+  setup();
+}
 
+Railcom::Railcom(const gpio_num_t rxPin, const gpio_num_t txPin)
+    : m_rxPin(rxPin),
+      m_txPin(txPin),
+      m_intPin((gpio_num_t)255),
+      m_address(0)
+{
+  setup();
+}
+
+void Railcom::setup()
+{
   xQueue1 = xQueueCreate(QUEUE_1_SIZE, sizeof(uint8_t));
   xQueue2 = xQueueCreate(QUEUE_2_SIZE, sizeof(uint16_t));
   TaskHandle_t railcomParseHandle = NULL;
   TaskHandle_t railcomReceiveHandle = NULL;
   TaskHandle_t railcomSetHandle = NULL;
 
-  Serial1.begin(250000, SERIAL_8N1, _rxPin, _txPin);    // Define and start ESP32 Serial1 port
-  
-  uint16_t x = 0;
-  for (uint8_t i = 0; i < NB_ADDRESS_TO_COMPARE; i++)      // On place des zéros dans le buffer de comparaison
+  switch (m_compt)
+  {
+  case 0:
+    mySerial = &Serial;
+    break;
+  case 1:
+    mySerial = &Serial1;
+    break;
+  case 2:
+    mySerial = &Serial2;
+    break;
+  default:
+    return;
+  }
+  mySerial->begin(250000, SERIAL_8N1, m_rxPin, m_txPin); // Define and start ESP32 HardwareSerial port
+
+  Railcom::m_compt++;
+
+  const uint16_t x = 0;
+  for (uint8_t i = 0; i < NB_ADDRESS_TO_COMPARE; i++) // On place des zéros dans le buffer de comparaison
     buffer.push(x);
 
-  xTaskCreatePinnedToCore(this->receiveData, "ReceiveData",  2 * 1024, this, 4, &railcomReceiveHandle, 0); // Création de la tâches pour la réception
-  xTaskCreatePinnedToCore(this->parseData,   "ParseData",    2 * 1024, this, 5, &railcomParseHandle,   1); // Création de la tâches pour le traitement
-  xTaskCreatePinnedToCore(this->setAddress,  "SetAddress",   1 * 1024, this, 3, &railcomSetHandle,     1); // Création de la tâches pour MAJ adresse
-}
+  if (m_intPin < 255)
+    xTaskCreatePinnedToCore(this->receiveData, "ReceiveData", 4 * 1024, this, 4, &railcomReceiveHandle, 0); // Création de la tâches pour la réception
+  else
+    attachInterrupt(digitalPinToInterrupt(m_intPin), receiveDataStatic, RISING);
 
+  xTaskCreatePinnedToCore(this->parseData, "ParseData", 4 * 1024, this, 5, &railcomParseHandle, 1); // Création de la tâches pour le traitement
+  xTaskCreatePinnedToCore(this->setAddress, "SetAddress", 2 * 1024, this, 3, &railcomSetHandle, 1); // Création de la tâches pour MAJ adresse
+}
 
 /* ----- getAddress   -------------------*/
 
-uint16_t Railcom::gAddress()
+uint16_t Railcom::address() const
 {
-  return address;
+  return m_address;
 }
-
 
 /* ----- receiveData   -------------------*/
 
-void Railcom::receiveData(void *p)
+void IRAM_ATTR Railcom::receiveData(void *p)
 {
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t inByte { 0 };
-  uint8_t compt{ 0 };
-  Railcom *pThis = (Railcom *) p;
+  uint8_t inByte(0);
+  uint8_t count(0);
+  Railcom *pThis = (Railcom *)p;
 
-for (;;)
+  for (;;)
   {
-    while (Serial1.available() > 0)
+    // debug.println("ok");
+    while (pThis->mySerial->available() > 0)
     {
-      if (compt == 0)
+      if (count == 0)
         inByte = '\0';
       else
-        inByte = (uint8_t)Serial1.read();
-      if (compt < 3)
+        inByte = (uint8_t)pThis->mySerial->read();
+      if (count < 3)
+      {
         xQueueSend(pThis->xQueue1, &inByte, 0);
-      compt++;
+      }
+      count++;
     }
-    compt = 0;
-    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1)); // toutes les x ms
+    count = 0;
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(10)); // toutes les x ms
   }
+}
 
-  
+void IRAM_ATTR Railcom::receiveDataStatic(void *p)
+{
+  uint8_t inByte(0);
+  inByte = '\0';
+  xQueueSend(pThis->xQueue1, &inByte, 0);
+  while (pThis->mySerial->available() > 0)
+  {
+    inByte = (uint8_t)pThis->mySerial->read();
+    xQueueSend(pThis->xQueue1, &inByte, 0);
+  }
+}
+
 /* ----- parseData   -------------------*/
 
-void Railcom::parseData(void *p)
+void IRAM_ATTR Railcom::parseData(void *p)
 {
-  bool start { false };
-  uint16_t temp { 0 };
-  byte inByte { 0 };
-  uint8_t rxArray[8] { 0 };
-  uint8_t rxArrayCnt { 0 };
-  byte dccAddr[2] { 0 };
-  Railcom *pThis = (Railcom *) p;
+  bool start(false);
+  int16_t temp(0);
+  byte inByte(0);
+  uint8_t rxArray[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  uint8_t rxArrayCnt(0);
+  byte dccAddr[2] = {0, 0};
+  Railcom *pThis = (Railcom *)p;
 
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
 
-
-  byte decodeArray[] = {172, 170, 169, 165, 163, 166, 156, 154, 153, 149, 147, 150, 142, 141, 139, 177, 178, 180, 184, 116,
-                        114, 108, 106, 105, 101, 99, 102, 92, 90, 89, 85, 83, 86, 78, 77, 75, 71, 113, 232, 228, 226, 209, 201,
-                        197, 216, 212, 210, 202, 198, 204, 120, 23, 27, 29, 30, 46, 54, 58, 39, 43, 45, 53, 57, 51, 15, 240, 225, 31
-                       }; // 31 is end of table (0001 1111)
+  const byte decodeArray[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 64, 255, 255, 255, 255, 255, 255, 255, 51, 255, 255, 255, 52,
+                              255, 53, 54, 255, 255, 255, 255, 255, 255, 255, 255, 58, 255, 255, 255, 59, 255, 60, 55, 255, 255, 255, 255, 63, 255, 61, 56, 255, 255, 62,
+                              57, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 36, 255, 255, 255, 35, 255, 34, 33, 255, 255, 255, 255, 31, 255, 30, 32, 255,
+                              255, 29, 28, 255, 27, 255, 255, 255, 255, 255, 255, 25, 255, 24, 26, 255, 255, 23, 22, 255, 21, 255, 255, 255, 255, 37, 20, 255, 19, 255, 255,
+                              255, 50, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 14, 255, 13, 12, 255, 255, 255, 255, 10, 255,
+                              9, 11, 255, 255, 8, 7, 255, 6, 255, 255, 255, 255, 255, 255, 4, 255, 3, 5, 255, 255, 2, 1, 255, 0, 255, 255, 255, 255, 15, 16, 255, 17, 255, 255, 255,
+                              18, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 43, 48, 255, 255, 42, 47, 255, 49, 255, 255, 255, 255, 41, 46, 255, 45, 255, 255,
+                              255, 44, 255, 255, 255, 255, 255, 255, 255, 255, 66, 40, 255, 39, 255, 255, 255, 38, 255, 255, 255, 255, 255, 255, 255, 65, 255, 255, 255, 255,
+                              255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
 
   auto check_4_8_code = [&]() -> bool
   {
-    uint8_t index = 0;
-    while (inByte != decodeArray[index])
+    if (decodeArray[inByte] < 255)
     {
-      if (decodeArray[index] == 31)
-        return false;
-      index++;
+      inByte = decodeArray[inByte];
+      return true;
     }
-    inByte = index;
-    return true;
+    return false;
   };
-
 
   for (;;)
   {
@@ -125,7 +184,7 @@ void Railcom::parseData(void *p)
     {
       if (xQueueReceive(pThis->xQueue1, &inByte, pdMS_TO_TICKS(portMAX_DELAY)) == pdPASS)
       {
-        if (inByte >= 0x0F && inByte <= 0xF0)
+        if (inByte > 0x0F && inByte < 0xF0)
         {
           if (check_4_8_code())
           {
@@ -135,7 +194,6 @@ void Railcom::parseData(void *p)
         }
       }
     }
-
 
     if (rxArrayCnt == 2)
     {
@@ -171,24 +229,21 @@ void Railcom::parseData(void *p)
   }
 }
 
-
 /* ----- setAddress   -------------------*/
 
-void Railcom::setAddress(void *p)
+void IRAM_ATTR Railcom::setAddress(void *p)
 {
   TickType_t xLastWakeTime;
   xLastWakeTime = xTaskGetTickCount();
 
-  uint16_t address{ 0 };
-  Railcom *pThis = (Railcom *) p;
+  uint16_t address(0);
+  Railcom *pThis = (Railcom *)p;
 
   for (;;)
   {
     address = 0;
     xQueueReceive(pThis->xQueue2, &address, pdMS_TO_TICKS(0));
-    pThis->address = address;
-
-    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(200)); // toutes les x ms
+    pThis->m_address = address;
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100)); // toutes les x ms
   }
 }
-  
