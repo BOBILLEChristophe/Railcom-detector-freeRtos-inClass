@@ -1,18 +1,16 @@
 /*
 
+
    Railcom.cpp
 
    © christophe bobille - locoduino.org
 
 */
 
-#ifndef ARDUINO_ARCH_ESP32
-#error "Select an ESP32 board"
-#endif
-
-#include <Arduino.h>
 
 #include "Railcom.h"
+
+uint8_t Railcom::m_compt(0);
 
 #define NB_ADDRESS_TO_COMPARE 100
 
@@ -27,13 +25,6 @@ RingBuf<uint16_t, NB_ADDRESS_TO_COMPARE> buffer; // Instance
 
 /* ----- Constructeur   -------------------*/
 
-Railcom::Railcom(const gpio_num_t rxPin)
-{
-  const gpio_num_t txPin = GPIO_NUM_17;
-  Railcom(rxPin, txPin);
-}
-
-
 Railcom::Railcom(const gpio_num_t rxPin, const gpio_num_t txPin) :
   m_rxPin(rxPin),
   m_txPin(txPin),
@@ -45,7 +36,24 @@ Railcom::Railcom(const gpio_num_t rxPin, const gpio_num_t txPin) :
   TaskHandle_t railcomReceiveHandle = NULL;
   TaskHandle_t railcomSetHandle = NULL;
 
-  Serial1.begin(250000, SERIAL_8N1, m_rxPin, m_txPin); // Define and start ESP32 Serial1 port
+  switch (m_compt)
+  {
+    case 0:
+      mySerial = &Serial;
+      break;
+    case 1:
+      mySerial = &Serial1;
+      break;
+    case 2:
+      mySerial = &Serial2;
+      break;
+    default:
+      return;
+  }
+  mySerial->begin(250000, SERIAL_8N1, m_rxPin, txPin); // Define and start ESP32 HardwareSerial port
+
+  Railcom::m_compt++;
+
 
   const uint16_t x = 0;
   for (uint8_t i = 0; i < NB_ADDRESS_TO_COMPARE; i++) // On place des zéros dans le buffer de comparaison
@@ -77,12 +85,12 @@ void IRAM_ATTR Railcom::receiveData(void *p)
   for (;;)
   {
     // debug.println("ok");
-    while (Serial1.available() > 0)
+    while (pThis->mySerial->available() > 0)
     {
       if (count == 0)
         inByte = '\0';
       else
-        inByte = (uint8_t)Serial1.read();
+        inByte = (uint8_t)pThis->mySerial->read();
       if (count < 3)
       {
         xQueueSend(pThis->xQueue1, &inByte, 0);
@@ -110,18 +118,19 @@ void IRAM_ATTR Railcom::parseData(void *p)
   xLastWakeTime = xTaskGetTickCount();
 
   const byte decodeArray[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 64, 255, 255, 255, 255, 255, 255, 255, 51, 255, 255, 255, 52,
-                        255, 53, 54, 255, 255, 255, 255, 255, 255, 255, 255, 58, 255, 255, 255, 59, 255, 60, 55, 255, 255, 255, 255, 63, 255, 61, 56, 255, 255, 62,
-                        57, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 36, 255, 255, 255, 35, 255, 34, 33, 255, 255, 255, 255, 31, 255, 30, 32, 255,
-                        255, 29, 28, 255, 27, 255, 255, 255, 255, 255, 255, 25, 255, 24, 26, 255, 255, 23, 22, 255, 21, 255, 255, 255, 255, 37, 20, 255, 19, 255, 255,
-                        255, 50, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 14, 255, 13, 12, 255, 255, 255, 255, 10, 255,
-                        9, 11, 255, 255, 8, 7, 255, 6, 255, 255, 255, 255, 255, 255, 4, 255, 3, 5, 255, 255, 2, 1, 255, 0, 255, 255, 255, 255, 15, 16, 255, 17, 255, 255, 255,
-                        18, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 43, 48, 255, 255, 42, 47, 255, 49, 255, 255, 255, 255, 41, 46, 255, 45, 255, 255,
-                        255, 44, 255, 255, 255, 255, 255, 255, 255, 255, 66, 40, 255, 39, 255, 255, 255, 38, 255, 255, 255, 255, 255, 255, 255, 65, 255, 255, 255, 255,
-                        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+                              255, 53, 54, 255, 255, 255, 255, 255, 255, 255, 255, 58, 255, 255, 255, 59, 255, 60, 55, 255, 255, 255, 255, 63, 255, 61, 56, 255, 255, 62,
+                              57, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 36, 255, 255, 255, 35, 255, 34, 33, 255, 255, 255, 255, 31, 255, 30, 32, 255,
+                              255, 29, 28, 255, 27, 255, 255, 255, 255, 255, 255, 25, 255, 24, 26, 255, 255, 23, 22, 255, 21, 255, 255, 255, 255, 37, 20, 255, 19, 255, 255,
+                              255, 50, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 14, 255, 13, 12, 255, 255, 255, 255, 10, 255,
+                              9, 11, 255, 255, 8, 7, 255, 6, 255, 255, 255, 255, 255, 255, 4, 255, 3, 5, 255, 255, 2, 1, 255, 0, 255, 255, 255, 255, 15, 16, 255, 17, 255, 255, 255,
+                              18, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 43, 48, 255, 255, 42, 47, 255, 49, 255, 255, 255, 255, 41, 46, 255, 45, 255, 255,
+                              255, 44, 255, 255, 255, 255, 255, 255, 255, 255, 66, 40, 255, 39, 255, 255, 255, 38, 255, 255, 255, 255, 255, 255, 255, 65, 255, 255, 255, 255,
+                              255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+                             };
 
   auto check_4_8_code = [&]() -> bool
   {
-    if(decodeArray[inByte] < 255)
+    if (decodeArray[inByte] < 255)
     {
       inByte = decodeArray[inByte];
       return true;
