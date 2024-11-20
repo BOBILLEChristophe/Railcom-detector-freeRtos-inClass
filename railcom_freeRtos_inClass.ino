@@ -22,9 +22,9 @@
 #define PROJECT "Railcom Detector ESP32"
 #define AUTHOR  "christophe BOBILLE Locoduino : christophe.bobille@gmail.com"
 
-Railcom railcom_0(GPIO_NUM_3, GPIO_NUM_1);   // Instance de la classe Railcom
-Railcom railcom_1(GPIO_NUM_16, GPIO_NUM_17); // Instance de la classe Railcom
-Railcom railcom_2(GPIO_NUM_13, GPIO_NUM_14); // Instance de la classe Railcom
+Railcom railcom_0(GPIO_NUM_3, UNUSED_PIN);   // Instance de la classe Railcom
+Railcom railcom_1(GPIO_NUM_16, UNUSED_PIN); // Instance de la classe Railcom
+Railcom railcom_2(GPIO_NUM_13, UNUSED_PIN); // Instance de la classe Railcom
 
 void setup()
 {
