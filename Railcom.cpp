@@ -50,7 +50,7 @@ Railcom::Railcom(const gpio_num_t rxPin, const gpio_num_t txPin) :
     default:
       return;
   }
-  mySerial->begin(250000, SERIAL_8N1, m_rxPin, txPin); // Define and start ESP32 HardwareSerial port
+  mySerial->begin(250000, SERIAL_8N1, m_rxPin, m_txPin); // Define and start ESP32 HardwareSerial port
 
   Railcom::m_compt++;
 
@@ -94,6 +94,7 @@ void IRAM_ATTR Railcom::receiveData(void *p)
       if (count < 3)
       {
         xQueueSend(pThis->xQueue1, &inByte, 0);
+        Serial.println(inByte);
       }
       count++;
     }
