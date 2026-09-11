@@ -28,7 +28,7 @@ Cela permet notamment :
 
 - de masquer la complexité du décodage RailCom au programme utilisateur ;
 - de réutiliser facilement le détecteur dans un projet plus important ;
-- de créer plusieurs instances indépendantes ;
+- de créer jusqu'à trois instances indépendantes ;
 - d'utiliser plusieurs détecteurs RailCom sur un même ESP32, dans la limite des UART matériels disponibles.
 
 Cette approche est particulièrement adaptée à des projets comme les satellites autonomes, où RailCom n'est qu'une fonction parmi d'autres.
